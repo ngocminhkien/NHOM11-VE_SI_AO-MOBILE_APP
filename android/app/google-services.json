@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "64838673170",
+    "project_id": "ve-si-ao-nhom11",
+    "storage_bucket": "ve-si-ao-nhom11.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:64838673170:android:e67c7f5c89a50ddb8249cb",
+        "android_client_info": {
+          "package_name": "com.example.ve_si_ao"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzsxzDqn3qf8-J5QiQsBlqBwMOzz2kwAA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
