@@ -7,6 +7,7 @@ class UserModel {
   final String phoneNumber;
   final String? avatarUrl;
   final DateTime createdAt;
+  final String role; // Biến này quan trọng để phân quyền
 
   UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     required this.phoneNumber,
     this.avatarUrl,
     required this.createdAt,
+    this.role = 'user', // Mặc định là user nếu không truyền vào
   });
 
   // Chuyển từ JSON (Firestore) sang Object (Dart)
@@ -25,7 +27,11 @@ class UserModel {
       fullName: data['fullName'] ?? '',
       phoneNumber: data['phoneNumber'] ?? '',
       avatarUrl: data['avatarUrl'],
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      // Xử lý an toàn cho thời gian
+      createdAt: data['createdAt'] != null 
+          ? (data['createdAt'] as Timestamp).toDate() 
+          : DateTime.now(),
+      role: data['role'] ?? 'user', 
     );
   }
 
@@ -37,6 +43,7 @@ class UserModel {
       'phoneNumber': phoneNumber,
       'avatarUrl': avatarUrl,
       'createdAt': Timestamp.fromDate(createdAt),
+      'role': role,
     };
   }
 }

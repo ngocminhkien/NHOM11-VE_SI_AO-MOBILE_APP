@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart'; // Để dùng kIsWeb
+import 'package:flutter/foundation.dart'; // Để dùng biến kIsWeb
+import 'features/home/screens/home_screen.dart'; // Import màn hình Home
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Cấu hình Firebase (Giữ nguyên key của bạn)
   if (kIsWeb) {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -12,7 +16,7 @@ void main() async {
         storageBucket: "ve-si-ao-nhom11.firebasestorage.app",
         messagingSenderId: "64838673170",
         appId: "1:64838673170:web:230d5533a684e3bb8249cb",
-        measurementId: "G-21FE8QCMJ7"
+        measurementId: "G-21FE8QCMJ7",
       ),
     );
   } else {
@@ -21,20 +25,22 @@ void main() async {
 
   runApp(const MyApp());
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ve Si Ao',
+      title: 'Vệ Sĩ Ảo',
+      debugShowCheckedModeBanner: false, // Tắt chữ DEBUG ở góc phải
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
       ),
-      home: const Scaffold(
-        body: Center(
-          child: Text('Welcome to Ve Si Ao App!'),
-        ),
-      ),
+      // --- PHẦN QUAN TRỌNG ĐÃ SỬA ---
+      // Chạy thẳng vào màn hình Home thay vì hiện chữ Welcome
+      home: const HomeScreen(), 
     );
   }
 }
