@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ve_si_ao_api.Data;
 using ve_si_ao_api.Models;
+using BCrypt.Net;
 
 namespace ve_si_ao_api.Controllers
 {
@@ -16,23 +17,83 @@ namespace ve_si_ao_api.Controllers
             _context = context;
         }
 
-        // 1. API Lấy danh sách toàn bộ User (Dùng cho Flutter đọc dữ liệu)
-        // GET: api/Users
+        // 1. Lấy danh sách User
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UserModel>>> GetUsers()
         {
             return await _context.Users.ToListAsync();
         }
 
-        // 2. API Tạo User mới (Dùng cho màn hình Đăng ký của Flutter)
-        // POST: api/Users
-        [HttpPost]
-        public async Task<ActionResult<UserModel>> PostUser(UserModel user)
+        // 2. API ĐĂNG KÝ
+        [HttpPost("register")]
+        public async Task<ActionResult<UserModel>> Register(UserModel user)
         {
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync(); // Lưu thẳng vào MySQL Workbench
+            // KIỂM TRA: Email hoặc Username đã tồn tại chưa
+            if (await _context.Users.AnyAsync(u => u.Email == user.Email))
+            {
+                return BadRequest(new { message = "Email này đã được sử dụng!" });
+            }
+            
+            if (await _context.Users.AnyAsync(u => u.Username == user.Username))
+            {
+                return BadRequest(new { message = "Tên đăng nhập này đã tồn tại!" });
+            }
 
-            return Ok(user);
+            if (string.IsNullOrEmpty(user.PlaintextPassword))
+            {
+                return BadRequest(new { message = "Mật khẩu không được để trống!" });
+            }
+
+            // Mã hóa mật khẩu
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PlaintextPassword);
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Đăng ký thành công!", userId = user.Id });
         }
+
+        // 3. API ĐĂNG NHẬP (HỖ TRỢ EMAIL VÀ TÊN ĐĂNG NHẬP)
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        {
+            // SỬA TẠI ĐÂY: Tìm user có Email KHỚP hoặc Username KHỚP với thông tin nhập vào
+            var user = await _context.Users.FirstOrDefaultAsync(u => 
+                u.Email == request.Email || u.Username == request.Email);
+
+            if (user == null)
+            {
+                return Unauthorized(new { message = "Tài khoản hoặc mật khẩu không đúng!" });
+            }
+
+            // Giải mã và kiểm tra mật khẩu
+            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+
+            if (!isPasswordValid)
+            {
+                return Unauthorized(new { message = "Tài khoản hoặc mật khẩu không đúng!" });
+            }
+
+            // Đăng nhập thành công
+            return Ok(new 
+            { 
+                message = "Đăng nhập thành công!", 
+                user = new { 
+                    user.Id, 
+                    user.Username, // Trả thêm Username về cho Flutter
+                    user.Email, 
+                    user.FullName, 
+                    user.PhoneNumber, 
+                    user.Role 
+                } 
+            });
+        }
+    }
+
+    public class LoginRequest
+    {
+        // Field này nhận giá trị từ ô "Tên đăng nhập hoặc email" trên Flutter
+        public string Email { get; set; } = string.Empty; 
+        public string Password { get; set; } = string.Empty;
     }
 }

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
-// --- GỌI TẤT CẢ 4 MÀN HÌNH TỪ CHUNG 1 THƯ MỤC CỦA BẠN ---
+// --- GỌI CÁC MÀN HÌNH TỪ THƯ MỤC HOME ---
 import 'features/home/screens/home_screen.dart';
 import 'features/home/screens/emergency_contact_screen.dart';
 import 'features/home/screens/history_screen.dart';
 import 'features/home/screens/profile_screen.dart';
+
+// --- IMPORT MÀN HÌNH ĐĂNG NHẬP ---
+// Đảm bảo bạn đã tạo file này trong thư mục lib/features/auth/ nhé!
+import 'features/auth/login_screen.dart'; 
 
 void main() {
   runApp(const VeSiAoApp());
@@ -22,11 +26,13 @@ class VeSiAoApp extends StatelessWidget {
         primaryColor: const Color(0xFF0095FF),
         scaffoldBackgroundColor: const Color(0xFFF5F5F5),
       ),
-      home: const MainNavigatorScreen(), 
+      // SỬA Ở ĐÂY: Cho app mở màn hình Đăng nhập đầu tiên
+      home: const LoginScreen(), 
     );
   }
 }
 
+// KHỐI GIAO DIỆN CHÍNH (Sẽ được gọi sau khi đăng nhập thành công)
 class MainNavigatorScreen extends StatefulWidget {
   const MainNavigatorScreen({super.key});
 
@@ -41,8 +47,8 @@ class _MainNavigatorScreenState extends State<MainNavigatorScreen> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const EmergencyContactScreen(),
-    const HistoryScreen(), 
-    const ProfileScreen(), 
+    const HistoryScreen(),
+    const ProfileScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -55,18 +61,24 @@ class _MainNavigatorScreenState extends State<MainNavigatorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_selectedIndex], // Hiển thị màn hình tương ứng
-      
+
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF0095FF), 
+        selectedItemColor: const Color(0xFF0095FF),
         unselectedItemColor: Colors.grey,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Trang chủ'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_filled),
+            label: 'Trang chủ',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Liên hệ'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Lịch sử'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Tài khoản'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: 'Tài khoản',
+          ),
         ],
       ),
     );
