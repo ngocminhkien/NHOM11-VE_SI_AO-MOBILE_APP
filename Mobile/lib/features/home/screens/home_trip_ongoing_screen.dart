@@ -91,7 +91,16 @@ class _HomeTripOngoingScreenState extends State<HomeTripOngoingScreen> {
                       child: ElevatedButton(
                         onPressed: () {
                           // Chuyển sang màn hình Theo dõi chuyến đi cụ thể
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const TrackTripScreen()));
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TrackTripScreen(
+                                tripId: '123', // Tạm thời để '123' hoặc biến id nếu có
+                                destinationName: ongoingDestination, // Lấy từ biến ở dòng 82
+                                estimatedMinutes: 20, // Điền một con số (ví dụ 20 phút)
+                              ),
+                            ),
+                          );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blue, // Màu xanh như thiết kế
