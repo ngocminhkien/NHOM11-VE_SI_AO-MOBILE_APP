@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'dart:async'; 
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'emergency_notification_screen.dart'; // Import màn hình SOS
-
-// Import 2 thư viện bản đồ xịn sò
+import 'emergency_notification_screen.dart'; 
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart'; // THƯ VIỆN GPS
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'dart:math';
 
 class TrackTripScreen extends StatefulWidget {
-  final String tripId; // <--- Nhận ID từ màn hình Thiết lập
+  final String tripId;
   final String destinationName;
   final int estimatedMinutes;
 
@@ -26,20 +28,261 @@ class TrackTripScreen extends StatefulWidget {
 
 class _TrackTripScreenState extends State<TrackTripScreen> {
   Timer? _timer;
-  late int _secondsRemaining; 
-  bool _isUpdating = false; // Tránh bấm nút nhiều lần
+  int _secondsRemaining = 0; 
+  bool _isUpdating = false;
+
+  // CÁC BIẾN QUẢN LÝ BẢN ĐỒ VÀ GPS
+  final MapController _mapController = MapController();
+  LatLng? _currentLocation; // Tọa độ hiện tại
+  bool _isLoadingLocation = true; // Cờ báo đang dò GPS
+
+  // TÍNH NĂNG CẢNH BÁO ĐỨNG YÊN
+  Timer? _locationCheckTimer;
+  Timer? _sosDialogTimer;
+  LatLng? _lastMovingLocation;
+  DateTime _lastMovingTime = DateTime.now();
+  bool _isDialogShowing = false;
+
+  // TÍNH NĂNG CẢNH BÁO VA CHẠM
+  StreamSubscription<UserAccelerometerEvent>? _accelerometerSubscription;
+  bool _isCollisionWarningShowing = false;
+  Timer? _collisionSosTimer;
 
   @override
   void initState() {
     super.initState();
-    _secondsRemaining = widget.estimatedMinutes * 60;
-    startTimer(); 
+    _initTimerFromPrefs();
+    _determinePosition().then((_) {
+      _startStationaryTracking();
+    });
+    _startCollisionDetection();
+  }
+
+  void _startCollisionDetection() {
+    _accelerometerSubscription = userAccelerometerEvents.listen(
+      (UserAccelerometerEvent event) {
+        if (_isUpdating || _secondsRemaining <= 0 || _isCollisionWarningShowing || _isDialogShowing) return;
+
+        double magnitude = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+        if (magnitude > 30.0) {
+          _showCollisionWarningDialog();
+        }
+      },
+      onError: (e) {},
+    );
+  }
+
+  void _showCollisionWarningDialog() {
+    if (!mounted) return;
+    setState(() {
+      _isCollisionWarningShowing = true;
+    });
+
+    _collisionSosTimer = Timer(const Duration(seconds: 30), () {
+      if (_isCollisionWarningShowing && mounted) {
+        Navigator.pop(context); // Đóng hộp thoại
+        _isCollisionWarningShowing = false;
+        _updateTripStatus("SOS");
+      }
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.red[50], // Nền đỏ báo động
+          title: const Row(children: [Icon(Icons.report_problem, color: Colors.red, size: 30), SizedBox(width: 10), Expanded(child: Text('Phát hiện va chạm!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)))]),
+          content: const Text('Phát hiện va chạm rất mạnh! Bạn vẫn ổn chứ?\n\n(Hệ thống sẽ BÁO ĐỘNG SOS tự động sau 30 GIÂY nếu không có phản hồi)', style: TextStyle(fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _collisionSosTimer?.cancel();
+                _isCollisionWarningShowing = false;
+                Navigator.pop(context);
+              },
+              child: const Text('TÔI ỔN', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _collisionSosTimer?.cancel();
+                _isCollisionWarningShowing = false;
+                Navigator.pop(context);
+                _updateTripStatus('SOS');
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+              child: const Text('GỬI SOS NGAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
+  void _startStationaryTracking() {
+    // Kích hoạt Timer 3 phút (180 giây)
+    _locationCheckTimer = Timer.periodic(const Duration(minutes: 3), (timer) async {
+       if (_isUpdating || _secondsRemaining <= 0) return; // Không check nếu đang lấy api hoặc hết giờ
+       
+       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+       if (!serviceEnabled) return;
+
+       LocationPermission permission = await Geolocator.checkPermission();
+       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
+
+       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+       LatLng newLoc = LatLng(position.latitude, position.longitude);
+
+       if (mounted) {
+         setState(() {
+           _currentLocation = newLoc;
+         });
+         _mapController.move(newLoc, 16.0);
+       }
+
+       if (_lastMovingLocation == null) {
+         _lastMovingLocation = newLoc;
+         _lastMovingTime = DateTime.now();
+         return;
+       }
+
+       const distance = Distance();
+       final double dist = distance.as(LengthUnit.Meter, _lastMovingLocation!, newLoc);
+
+       if (dist > 20.0) {
+         // Di chuyển vượt qua 20m, xem như người dùng vẫn ổn
+         _lastMovingLocation = newLoc;
+         _lastMovingTime = DateTime.now();
+       } else {
+         // Nếu đứng yên
+         final int minutesStationary = DateTime.now().difference(_lastMovingTime).inMinutes;
+         if (minutesStationary >= 10 && !_isDialogShowing) {
+           _showStationaryWarningDialog();
+         }
+       }
+    });
+  }
+
+  void _showStationaryWarningDialog() {
+    if (!mounted) return;
+    _isDialogShowing = true;
+    _sosDialogTimer = Timer(const Duration(seconds: 60), () {
+      if (_isDialogShowing && mounted) {
+        Navigator.pop(context); // Đóng hộp thoại
+        _isDialogShowing = false;
+        _updateTripStatus("SOS");
+      }
+    });
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 30), SizedBox(width: 10), Text('Bạn vẫn ổn chứ?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))]),
+          content: const Text('Bạn đã không di chuyển trong 10 phút. Nếu bạn không phản hồi trong 60 giây, hệ thống sẽ BÁO ĐỘNG SOS tự động cho người thân!', style: TextStyle(fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _sosDialogTimer?.cancel();
+                _isDialogShowing = false;
+                _lastMovingTime = DateTime.now(); // Cấp thêm 10 phút nữa
+                Navigator.pop(context);
+              },
+              child: const Text('TÔI VẪN ỔN', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                _sosDialogTimer?.cancel();
+                _isDialogShowing = false;
+                Navigator.pop(context);
+                _updateTripStatus('SOS');
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+              child: const Text('GỬI SOS NGAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
+  Future<void> _initTimerFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final int? endTimeMs = prefs.getInt('activeTripEndTime');
+    if (endTimeMs != null) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final diffSeconds = (endTimeMs - nowMs) ~/ 1000;
+      if (diffSeconds > 0) {
+        setState(() {
+          _secondsRemaining = diffSeconds;
+        });
+      } else {
+        setState(() {
+          _secondsRemaining = 0;
+        });
+      }
+    } else {
+      setState(() {
+        _secondsRemaining = widget.estimatedMinutes * 60;
+      });
+    }
+    startTimer();
   }
 
   @override
   void dispose() {
     _timer?.cancel(); 
+    _locationCheckTimer?.cancel();
+    _sosDialogTimer?.cancel();
+    _accelerometerSubscription?.cancel();
+    _collisionSosTimer?.cancel();
     super.dispose();
+  }
+
+  // ==========================================
+  // HÀM XIN QUYỀN VÀ LẤY TỌA ĐỘ GPS
+  // ==========================================
+  Future<void> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // Kiểm tra xem GPS trên điện thoại có đang bật không
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) setState(() => _isLoadingLocation = false);
+      return;
+    }
+
+    // Kiểm tra quyền (Cho phép app dùng vị trí)
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) setState(() => _isLoadingLocation = false);
+        return;
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) setState(() => _isLoadingLocation = false);
+      return;
+    } 
+
+    // Nếu đã có quyền -> Lấy tọa độ và di chuyển bản đồ tới đó
+    Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    if (mounted) {
+      setState(() {
+        _currentLocation = LatLng(position.latitude, position.longitude);
+        _lastMovingLocation = _currentLocation;
+        _lastMovingTime = DateTime.now();
+        _isLoadingLocation = false;
+      });
+      // Di chuyển ống kính bản đồ về chỗ mình đứng
+      _mapController.move(_currentLocation!, 16.0); 
+    }
   }
 
   void startTimer() {
@@ -50,37 +293,48 @@ class _TrackTripScreenState extends State<TrackTripScreen> {
         });
       } else {
         _timer?.cancel();
-        // Hết giờ -> Tự động kích hoạt SOS
         _updateTripStatus("SOS");
       }
     });
   }
 
-  // ==========================================
-  // HÀM QUYỀN LỰC: BÁO CÁO TRẠNG THÁI LÊN C#
-  // ==========================================
   Future<void> _updateTripStatus(String status) async {
     if (_isUpdating) return;
     setState(() => _isUpdating = true);
 
+    _timer?.cancel();
+    _locationCheckTimer?.cancel();
+    _sosDialogTimer?.cancel();
+    _accelerometerSubscription?.cancel();
+    _collisionSosTimer?.cancel();
+
     try {
-      // Gọi API PUT để cập nhật trạng thái
       final response = await http.put(
         Uri.parse('http://localhost:5134/api/Trip/${widget.tripId}/status'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"status": status}),
+        body: jsonEncode({
+          "status": status,
+          "latitude": _currentLocation?.latitude,
+          "longitude": _currentLocation?.longitude
+        }),
       );
 
       if (response.statusCode == 200) {
-        _timer?.cancel(); // Dừng đồng hồ
+        _timer?.cancel(); 
+        
+        // Xoá Active Trip khỏi SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('activeTripId');
+        await prefs.remove('activeTripName');
+        await prefs.remove('activeTripTime');
+        await prefs.remove('activeTripEndTime');
+
         if (!mounted) return;
 
-        // Xử lý chuyển trang dựa theo trạng thái
         if (status == "An toàn") {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã cập nhật trạng thái An Toàn!')));
-          Navigator.pop(context); // Quay về trang chủ
+          Navigator.pop(context); 
         } else if (status == "SOS") {
-          // Mở tung màn hình Đỏ báo động
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const EmergencyNotificationScreen()),
@@ -118,31 +372,58 @@ class _TrackTripScreenState extends State<TrackTripScreen> {
       ),
       body: Column(
         children: [
-          // === KHU VỰC BẢN ĐỒ THẬT (ĐÃ NÂNG CẤP) ===
+          // === KHU VỰC BẢN ĐỒ ===
           Expanded(
             flex: 2,
-            child: FlutterMap(
-              options: const MapOptions(
-                initialCenter: LatLng(21.028511, 105.804817), // Tọa độ mặc định (Hà Nội)
-                initialZoom: 15.0, // Độ zoom
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.vesiao.app',
-                ),
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: const LatLng(21.028511, 105.804817),
-                      width: 50,
-                      height: 50,
-                      child: const Icon(Icons.location_pin, color: Colors.red, size: 45), // Ghim đỏ vị trí
+            child: _isLoadingLocation
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 10),
+                        Text("Đang dò tìm vệ tinh GPS..."),
+                      ],
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  )
+                : FlutterMap(
+                    mapController: _mapController, // Gắn bộ điều khiển
+                    options: MapOptions(
+                      // Nếu không có GPS, mặc định chỉ vào Hà Nội
+                      initialCenter: _currentLocation ?? const LatLng(21.028511, 105.804817), 
+                      initialZoom: 16.0, 
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.vesiao.app',
+                      ),
+                      if (_currentLocation != null)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _currentLocation!,
+                              width: 60,
+                              height: 60,
+                              // Hiệu ứng chấm xanh nhấp nháy thường thấy ở app bản đồ
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: 40, height: 40,
+                                    decoration: BoxDecoration(color: Colors.blue.withOpacity(0.3), shape: BoxShape.circle),
+                                  ),
+                                  Container(
+                                    width: 15, height: 15,
+                                    decoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
           ),
 
           // KHU VỰC THÔNG TIN VÀ ĐẾM NGƯỢC
@@ -184,7 +465,6 @@ class _TrackTripScreenState extends State<TrackTripScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    // BẤM NÚT "TÔI ĐÃ ĐẾN NƠI" -> BÁO AN TOÀN LÊN C#
                     onPressed: _isUpdating ? null : () => _updateTripStatus("An toàn"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF4CAF50), foregroundColor: Colors.white,
@@ -199,7 +479,6 @@ class _TrackTripScreenState extends State<TrackTripScreen> {
                 const SizedBox(width: 15),
                 Expanded(
                   child: ElevatedButton(
-                    // BẤM NÚT "SOS" -> BÁO SOS LÊN C# VÀ CHUYỂN MÀN HÌNH ĐỎ
                     onPressed: _isUpdating ? null : () => _updateTripStatus("SOS"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF3F3F), foregroundColor: Colors.white,

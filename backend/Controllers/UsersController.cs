@@ -53,6 +53,20 @@ namespace ve_si_ao_api.Controllers
             return Ok(new { message = "Đăng ký thành công!", userId = user.Id });
         }
 
+        // ==========================================
+        // API LƯU FCM TOKEN CỦA THIẾT BỊ
+        // ==========================================
+        [HttpPut("{id}/fcm-token")]
+        public async Task<IActionResult> UpdateFCMToken(string id, [FromBody] UpdateFCMRequest request)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound(new { message = "Không tìm thấy người dùng!" });
+
+            user.FCMToken = request.Token;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Đã cập nhật Token thiết bị." });
+        }
+
         // 3. API ĐĂNG NHẬP (HỖ TRỢ EMAIL VÀ TÊN ĐĂNG NHẬP)
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -88,6 +102,46 @@ namespace ve_si_ao_api.Controllers
                 } 
             });
         }
+        
+        [HttpGet("stats")]
+        public async Task<ActionResult<object>> GetUserStats()
+        {
+            var now = DateTime.Now;
+            var today = DateTime.Today;
+            var thisMonth = new DateTime(today.Year, today.Month, 1);
+            var last24Hours = now.AddDays(-1);
+            
+            var dailyCount = await _context.Users.CountAsync(u => u.CreatedAt >= last24Hours);
+            var monthlyCount = await _context.Users.CountAsync(u => u.CreatedAt >= thisMonth);
+            var activeCount = await _context.Users.CountAsync(u => u.IsActive);
+            var blockedCount = await _context.Users.CountAsync(u => u.IsBlocked);
+            var totalCount = await _context.Users.CountAsync();
+            
+            return new { 
+                dailyCount, 
+                monthlyCount, 
+                activeCount, 
+                blockedCount,
+                totalCount
+            };
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateUser(string id, UserModel user)
+        {
+            if (id != user.Id) return BadRequest();
+            _context.Entry(user).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<UserModel>> AddUser(UserModel user)
+        {
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            return Ok(user);
+        }
     }
 
     public class LoginRequest
@@ -95,5 +149,10 @@ namespace ve_si_ao_api.Controllers
         // Field này nhận giá trị từ ô "Tên đăng nhập hoặc email" trên Flutter
         public string Email { get; set; } = string.Empty; 
         public string Password { get; set; } = string.Empty;
+    }
+
+    public class UpdateFCMRequest
+    {
+        public string Token { get; set; } = string.Empty;
     }
 }

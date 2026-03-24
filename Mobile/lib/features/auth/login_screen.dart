@@ -2,9 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart'; // THÊM THƯ VIỆN LƯU TRỮ
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ve_si_ao/core/constants/api_constants.dart'; // <--- DÙNG ĐƯỜNG DẪN PACKAGE CHUẨN
 import 'register_screen.dart'; 
-import '../../../main.dart'; 
+import '../../main.dart'; 
+import '../admin/screens/admin_main_wrapper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +16,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _identifierController = TextEditingController(); // Đổi tên cho rõ nghĩa (Email hoặc Username)
+  final TextEditingController _identifierController = TextEditingController(); 
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
@@ -36,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await prefs.setString('username', userData['username'] ?? '');
   }
 
-  // LOGIC GỌI API ĐĂNG NHẬP
+  // LOGIC GỌI API ĐĂNG NHẬP (ĐÃ CHUẨN HÓA)
   Future<void> _handleLogin() async {
     final String identifier = _identifierController.text.trim();
     final String password = _passwordController.text;
@@ -49,37 +51,47 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _isLoading = true; });
 
     try {
-      // Mẹo: Dùng 127.0.0.1 thay cho localhost để ổn định hơn trên trình duyệt/windows
-      const String apiUrl = 'http://127.0.0.1:5134/api/Users/login';
-
+      // <--- LẤY LINK TỪ TRẠM TRUNG TÂM
       final response = await http.post(
-        Uri.parse(apiUrl),
+        Uri.parse(ApiConstants.loginUrl), 
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'Email': identifier, // Backend nhận key 'Email' cho cả email/username
+          'Email': identifier, 
           'Password': password,
         }),
       );
 
-      final data = jsonDecode(response.body);
+      dynamic data;
+      try {
+        data = jsonDecode(response.body);
+      } catch (e) {
+        data = {'message': 'Lỗi định dạng phản hồi từ server.'};
+      }
 
       if (response.statusCode == 200) {
-        // --- BƯỚC QUAN TRỌNG: LƯU DỮ LIỆU ---
         if (data['user'] != null) {
           await _saveUserData(data['user']);
         }
 
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainNavigatorScreen()),
-          );
+          final user = data['user'];
+          if (user != null && (user['role'] == "Admin" || user['role'] == "admin")) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const AdminMainWrapper()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const MainNavigatorScreen()),
+            );
+          }
         }
       } else {
         _showErrorDialog(data['message'] ?? "Tài khoản hoặc mật khẩu không chính xác.");
       }
     } catch (e) {
-      _showErrorDialog("Lỗi kết nối Server. Hãy chắc chắn Backend đang chạy!");
+      _showErrorDialog("Lỗi kết nối Server. Hãy chắc chắn Backend đang chạy và IP trong api_constants.dart là đúng!");
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -117,14 +129,12 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Logo Shield
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
                   child: const Icon(Icons.shield_outlined, color: primaryColor, size: 50),
                 ),
                 const SizedBox(height: 30),
-
                 const Text('SafeTrek Vietnam', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 const Text('Đăng nhập để tiếp tục', style: TextStyle(fontSize: 14, color: Colors.grey)),
@@ -138,7 +148,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 _buildTextField(_passwordController, 'Nhập mật khẩu', isObscure: true),
                 const SizedBox(height: 35),
 
-                // Nút Đăng nhập
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -181,10 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildTextField(TextEditingController controller, String hint, {bool isObscure = false}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F2F5),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(10)),
       child: TextField(
         controller: controller,
         obscureText: isObscure,
