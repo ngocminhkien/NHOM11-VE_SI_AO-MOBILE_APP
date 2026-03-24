@@ -45,5 +45,5 @@ app.UseAuthorization();
 
 // BƯỚC 2: Map các Controller
 app.MapControllers();
-
+app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 app.Run();
