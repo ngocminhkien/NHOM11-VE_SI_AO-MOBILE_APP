@@ -39,6 +39,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() { _isLoading = true; });
 
+<<<<<<< HEAD
+    // Thu thập dữ liệu từ các ô nhập
+    final String username = _usernameController.text.trim();
+    final String password = _passwordController.text;
+    final String fullName = _fullNameController.text.trim();
+    final String email = _emailController.text.trim();
+    final String phone = _phoneController.text.trim();
+
+    // LƯU Ý: Nếu chạy trên máy ảo Android, hãy đổi localhost thành 10.0.2.2
+    //const String apiUrl = 'http://localhost:5134/api/Users/register';
+    const String apiUrl = 'http://127.0.0.1:5134/api/Users/register';
+=======
+>>>>>>> 0e697d7cfcfb285b1fbe9dc2f9e32436021ef090
     try {
       final response = await http.post(
         Uri.parse(ApiConstants.registerUrl), // Hết đỏ dòng này
@@ -66,7 +79,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _showErrorDialog(data['message'] ?? "Đăng ký thất bại.");
       }
     } catch (e) {
+<<<<<<< HEAD
+      _showErrorDialog("Lỗi kết nối: $e");
+=======
       _showErrorDialog("Lỗi kết nối: Kiểm tra IP trong api_constants.dart và đảm bảo Backend đã bật!");
+>>>>>>> 0e697d7cfcfb285b1fbe9dc2f9e32436021ef090
     } finally {
       setState(() { _isLoading = false; });
     }

@@ -53,6 +53,20 @@ namespace ve_si_ao_api.Controllers
             return Ok(new { message = "Đăng ký thành công!", userId = user.Id });
         }
 
+        // ==========================================
+        // API LƯU FCM TOKEN CỦA THIẾT BỊ
+        // ==========================================
+        [HttpPut("{id}/fcm-token")]
+        public async Task<IActionResult> UpdateFCMToken(string id, [FromBody] UpdateFCMRequest request)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound(new { message = "Không tìm thấy người dùng!" });
+
+            user.FCMToken = request.Token;
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Đã cập nhật Token thiết bị." });
+        }
+
         // 3. API ĐĂNG NHẬP (HỖ TRỢ EMAIL VÀ TÊN ĐĂNG NHẬP)
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -135,5 +149,10 @@ namespace ve_si_ao_api.Controllers
         // Field này nhận giá trị từ ô "Tên đăng nhập hoặc email" trên Flutter
         public string Email { get; set; } = string.Empty; 
         public string Password { get; set; } = string.Empty;
+    }
+
+    public class UpdateFCMRequest
+    {
+        public string Token { get; set; } = string.Empty;
     }
 }

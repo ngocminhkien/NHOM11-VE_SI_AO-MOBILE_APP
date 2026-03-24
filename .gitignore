@@ -1,0 +1,13 @@
+# Chặn toàn bộ file rác của Backend
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
+*.user
+
+# Chặn file rác của Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
