@@ -1,24 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using ve_si_ao_api.Data;
+using ve_si_ao_api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Cấu hình Services
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 
 // Móc nối MySQL
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
-// --- CẤU HÌNH CORS (NÊN ĐỂ ĐẦY ĐỦ NHƯ THẾ NÀY) ---
+// --- CẤU HÌNH CORS CHO SIGNALR ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true) // Thay cho AllowAnyOrigin() khi dùng AllowCredentials()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -27,23 +30,17 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 2. Cấu hình Middleware (THỨ TỰ LÀ RẤT QUAN TRỌNG TẠI ĐÂY)
-
+// 2. Cấu hình Middleware
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// BƯỚC 1: CORS phải nằm ngay sau Build và TRƯỚC Authorization/MapControllers
 app.UseCors("AllowAll");
-
-// Nếu bạn chạy Local qua HTTP thì có thể bỏ qua dòng HttpsRedirection này 
-// app.UseHttpsRedirection(); 
-
 app.UseAuthorization();
 
-// BƯỚC 2: Map các Controller
+// BƯỚC 2: Map các Controller và Hub
 app.MapControllers();
-app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
+app.MapHub<AlertHub>("/hubs/alerts");
 app.Run();

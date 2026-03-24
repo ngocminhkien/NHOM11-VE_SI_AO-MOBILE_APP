@@ -88,6 +88,46 @@ namespace ve_si_ao_api.Controllers
                 } 
             });
         }
+        
+        [HttpGet("stats")]
+        public async Task<ActionResult<object>> GetUserStats()
+        {
+            var now = DateTime.Now;
+            var today = DateTime.Today;
+            var thisMonth = new DateTime(today.Year, today.Month, 1);
+            var last24Hours = now.AddDays(-1);
+            
+            var dailyCount = await _context.Users.CountAsync(u => u.CreatedAt >= last24Hours);
+            var monthlyCount = await _context.Users.CountAsync(u => u.CreatedAt >= thisMonth);
+            var activeCount = await _context.Users.CountAsync(u => u.IsActive);
+            var blockedCount = await _context.Users.CountAsync(u => u.IsBlocked);
+            var totalCount = await _context.Users.CountAsync();
+            
+            return new { 
+                dailyCount, 
+                monthlyCount, 
+                activeCount, 
+                blockedCount,
+                totalCount
+            };
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateUser(string id, UserModel user)
+        {
+            if (id != user.Id) return BadRequest();
+            _context.Entry(user).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<UserModel>> AddUser(UserModel user)
+        {
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+            return Ok(user);
+        }
     }
 
     public class LoginRequest

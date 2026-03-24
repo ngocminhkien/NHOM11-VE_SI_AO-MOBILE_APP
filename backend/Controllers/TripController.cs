@@ -63,6 +63,27 @@ namespace ve_si_ao_api.Controllers
 
             return Ok(new { message = "Lấy lịch sử thành công!", data = trips });
         }
+        // ==========================================
+        // 4. API: LẤY TẤT CẢ CHUYẾN ĐI (Dành cho Admin)
+        // ==========================================
+        [HttpGet]
+        public async Task<IActionResult> GetAllTrips()
+        {
+            var trips = await _context.Trips.ToListAsync();
+            return Ok(new { message = "Lấy danh sách chuyến đi thành công!", data = trips });
+        }
+
+        // ==========================================
+        // 5. API: SỐ CHUYẾN ĐI HÔM NAY (Dùng cho Dashboard Admin)
+        // ==========================================
+        [HttpGet("stats/today")]
+        public async Task<IActionResult> GetTodayStats()
+        {
+            var today = DateTime.Today;
+            var todayCount = await _context.Trips.CountAsync(t => t.CreatedAt >= today);
+            var totalCount = await _context.Trips.CountAsync();
+            return Ok(new { todayCount, totalCount });
+        }
     } 
     public class UpdateStatusDto
     {

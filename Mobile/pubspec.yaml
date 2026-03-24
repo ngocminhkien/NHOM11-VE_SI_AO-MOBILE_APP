@@ -46,6 +46,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   shared_preferences: ^2.5.4
+  signalr_core: any
+
+dependency_overrides:
+  http: any
 
 dev_dependencies:
   flutter_test:

@@ -4,9 +4,22 @@ import 'features/home/screens/emergency_contact_screen.dart';
 import 'features/home/screens/history_screen.dart';
 import 'features/home/screens/profile_screen.dart';
 import 'features/auth/login_screen.dart'; 
+import 'package:provider/provider.dart';
+import 'features/admin/providers/admin_alert_provider.dart';
+import 'features/admin/providers/admin_user_provider.dart';
+import 'features/admin/providers/admin_trip_provider.dart';
 
 void main() {
-  runApp(const VeSiAoApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AdminAlertProvider()),
+        ChangeNotifierProvider(create: (_) => AdminUserProvider()),
+        ChangeNotifierProvider(create: (_) => AdminTripProvider()),
+      ],
+      child: const VeSiAoApp(),
+    ),
+  );
 }
 
 class VeSiAoApp extends StatelessWidget {

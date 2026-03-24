@@ -9,9 +9,9 @@ namespace ve_si_ao_api.Data
         {
         }
 
-        // Dòng này sẽ tự động đẻ ra bảng "Users" trong MySQL Workbench của bạn
         public DbSet<UserModel> Users { get; set; }
         public DbSet<TripModel> Trips { get; set; }
         public DbSet<EmergencyContactModel> EmergencyContacts { get; set; }
+        public DbSet<AlertModel> Alerts { get; set; } // RESTORED
     }
 }

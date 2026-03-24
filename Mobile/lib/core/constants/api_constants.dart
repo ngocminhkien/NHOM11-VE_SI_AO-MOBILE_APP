@@ -11,4 +11,13 @@ class ApiConstants {
   // Danh sách các đường dẫn API
   static const String registerUrl = '$baseUrl/Users/register';
   static const String loginUrl = '$baseUrl/Users/login';
+  static const String usersUrl = '$baseUrl/Users';
+  static const String alertsUrl = '$baseUrl/Alerts';
+  static const String tripUrl = '$baseUrl/Trip';
+  static const String unhandledAlertsUrl = '$baseUrl/Alerts/unhandled';
+  static const String alertStatsUrl = '$baseUrl/Alerts/stats';
+  static const String alertHistoryUrl = '$baseUrl/Alerts/history';
+  static String resolveAlertUrl(int id) => '$baseUrl/Alerts/$id/resolve';
+  
+  static const String alertHubUrl = 'http://$_host:$_port/hubs/alerts';
 }

@@ -19,6 +19,9 @@ namespace ve_si_ao_api.Models
         public string FullName { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
         public string Role { get; set; } = "user";
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public bool IsActive { get; set; } = false;
+        public bool IsBlocked { get; set; } = false;
 
         // Mật khẩu gốc từ Flutter gửi lên (Không lưu vào DB)
         [NotMapped]

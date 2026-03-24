@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'dart:convert'; 
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http; 
+import '../../../core/constants/api_constants.dart';
 import 'track_trip_screen.dart'; 
 
 class SetupTripScreen extends StatefulWidget {
@@ -42,7 +43,7 @@ class _SetupTripScreenState extends State<SetupTripScreen> {
     };
 
     try {
-      var url = Uri.parse('http://localhost:5134/api/Trip/start');
+      var url = Uri.parse('${ApiConstants.tripUrl}/start');
       var response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},

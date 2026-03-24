@@ -1,6 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
+import '../../../core/constants/api_constants.dart';
 import 'setup_trip_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // 2. Hàm gọi API C# lấy tên User
   Future<void> fetchUserData() async {
     try {
-      final response = await http.get(Uri.parse('http://localhost:5134/api/Users'));
+      final response = await http.get(Uri.parse(ApiConstants.usersUrl));
       if (response.statusCode == 200) {
         final List<dynamic> users = jsonDecode(response.body);
         if (users.isNotEmpty) {
@@ -50,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchRecentTrips() async {
     try {
       // Gọi lên Trạm thu phát sóng (API) bằng ID test
-      final response = await http.get(Uri.parse('http://localhost:5134/api/Trip/user/user-test-001'));
+      final response = await http.get(Uri.parse('${ApiConstants.tripUrl}/user/user-test-001'));
 
       if (response.statusCode == 200) {
         // Giải mã gói hàng JSON từ C# gửi về
@@ -61,10 +62,10 @@ class _HomeScreenState extends State<HomeScreen> {
         
         setState(() {
           // Ép kiểu dữ liệu từ API sang dạng mà Giao diện đọc được
-          recentTrips = tripsData.map((trip) => {
+          recentTrips = tripsData.map((trip) => <String, dynamic>{
             "id": trip['id'].toString(),
             "title": trip['title'] ?? "Không có tên",
-            "time": trip['time'] ?? "", // Hiện tại nó sẽ hiện chữ "15 phút" như bạn đã nhập
+            "time": trip['time'] ?? "",
             "status": trip['status'] ?? "Không rõ",
           }).toList();
 
@@ -76,6 +77,31 @@ class _HomeScreenState extends State<HomeScreen> {
       print("Lỗi khi gọi API Lịch sử: $e");
       if (!mounted) return;
       setState(() { recentTrips = []; }); // Lỗi thì để danh sách trống
+    }
+  }
+
+  Future<void> _sendSOS() async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConstants.alertsUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "userName": userName,
+          "alertType": "SOS",
+          "location": "Vị trí hiện tại", // Cần tích hợp Geolocator nếu muốn tọa độ thật
+          "message": "Người dùng $userName đã nhấn nút SOS khẩn cấp!",
+          "isHandled": false
+        }),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: Colors.red, content: Text('Đã gửi tín hiệu SOS tới quản trị viên!'))
+        );
+      }
+    } catch (e) {
+      print("Lỗi gửi SOS: $e");
     }
   }
 
@@ -132,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('Nhấn để gửi báo động', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: () { print("Đã bấm SOS!"); },
+                        onTap: () => _sendSOS(),
                         child: Container(
                           width: 120, height: 120,
                           decoration: BoxDecoration(

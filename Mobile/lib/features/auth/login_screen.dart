@@ -5,7 +5,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ve_si_ao/core/constants/api_constants.dart'; // <--- DÙNG ĐƯỜNG DẪN PACKAGE CHUẨN
 import 'register_screen.dart'; 
-import '../../../main.dart'; 
+import '../../main.dart'; 
+import '../admin/screens/admin_main_wrapper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -73,10 +74,18 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const MainNavigatorScreen()),
-          );
+          final user = data['user'];
+          if (user != null && (user['role'] == "Admin" || user['role'] == "admin")) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const AdminMainWrapper()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const MainNavigatorScreen()),
+            );
+          }
         }
       } else {
         _showErrorDialog(data['message'] ?? "Tài khoản hoặc mật khẩu không chính xác.");
