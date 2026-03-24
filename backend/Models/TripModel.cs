@@ -13,5 +13,6 @@ namespace ve_si_ao_api.Models
         
         // Cột này để biết chuyến đi này là của User nào
         public string UserId { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

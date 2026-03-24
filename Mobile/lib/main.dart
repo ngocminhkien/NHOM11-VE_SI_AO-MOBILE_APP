@@ -5,8 +5,20 @@ import 'features/home/screens/history_screen.dart';
 import 'features/home/screens/profile_screen.dart';
 import 'features/auth/login_screen.dart'; 
 
+import 'package:provider/provider.dart';
+import 'features/users/user_provider.dart';
+import 'features/alerts/alert_provider.dart';
+
 void main() {
-  runApp(const VeSiAoApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => AlertProvider()),
+      ],
+      child: const VeSiAoApp(),
+    ),
+  );
 }
 
 class VeSiAoApp extends StatelessWidget {

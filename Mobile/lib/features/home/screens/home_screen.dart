@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:provider/provider.dart';
+import '../../alerts/alert_provider.dart';
+import 'emergency_notification_screen.dart';
 import 'setup_trip_screen.dart';
+import 'package:ve_si_ao/core/constants/api_constants.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,6 +45,24 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() { userName = "Người dùng"; });
+    }
+  }
+
+  // 2.2 Hàm Gửi SOS (Đã chuyển logic vào Provider)
+  Future<void> handleSOS() async {
+    final alertP = context.read<AlertProvider>();
+    final id = await alertP.sendSOS(userName: userName);
+    
+    if (!mounted) return;
+    if (id != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => EmergencyNotificationScreen(alertId: id)),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Lỗi: Không thể gửi SOS. Kiểm tra kết nối!")),
+      );
     }
   }
 
@@ -132,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('Nhấn để gửi báo động', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: () { print("Đã bấm SOS!"); },
+                        onTap: () => handleSOS(),
                         child: Container(
                           width: 120, height: 120,
                           decoration: BoxDecoration(

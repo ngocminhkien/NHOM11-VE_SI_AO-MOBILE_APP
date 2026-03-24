@@ -83,7 +83,7 @@ class _TrackTripScreenState extends State<TrackTripScreen> {
           // Mở tung màn hình Đỏ báo động
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const EmergencyNotificationScreen()),
+            MaterialPageRoute(builder: (context) => const EmergencyNotificationScreen(alertId: "TRIP-SOS-ACTIVE")),
           );
         }
       } else {

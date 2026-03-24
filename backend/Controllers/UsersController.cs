@@ -24,6 +24,36 @@ namespace ve_si_ao_api.Controllers
             return await _context.Users.ToListAsync();
         }
 
+        // 1.1 Lấy thống kê Users (Dành cho Admin)
+        [HttpGet("stats")]
+        public async Task<ActionResult> GetUserStats()
+        {
+            var totalUsers = await _context.Users.CountAsync();
+            var totalTrips = await _context.Trips.CountAsync();
+            var now = DateTime.UtcNow;
+            var twentyFourHoursAgo = now.AddHours(-24);
+            var newUsers24h = await _context.Users.CountAsync(u => u.CreatedAt >= twentyFourHoursAgo);
+            
+            return Ok(new { TotalUsers = totalUsers, TotalTrips = totalTrips, NewUsersToday = newUsers24h });
+        }
+
+        // 1.2 Xóa User (Dành cho Admin)
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteUser(string id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+
         // 2. API ĐĂNG KÝ
         [HttpPost("register")]
         public async Task<ActionResult<UserModel>> Register(UserModel user)
