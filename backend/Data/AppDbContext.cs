@@ -13,6 +13,5 @@ namespace ve_si_ao_api.Data
         public DbSet<UserModel> Users { get; set; }
         public DbSet<TripModel> Trips { get; set; }
         public DbSet<EmergencyContactModel> EmergencyContacts { get; set; }
-        public DbSet<AlertModel> Alerts { get; set; }
     }
 }
