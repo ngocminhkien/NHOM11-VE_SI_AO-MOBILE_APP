@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
-
-// --- GỌI CÁC MÀN HÌNH TỪ THƯ MỤC HOME ---
 import 'features/home/screens/home_screen.dart';
 import 'features/home/screens/emergency_contact_screen.dart';
 import 'features/home/screens/history_screen.dart';
 import 'features/home/screens/profile_screen.dart';
-
-// --- IMPORT MÀN HÌNH ĐĂNG NHẬP ---
-// Đảm bảo bạn đã tạo file này trong thư mục lib/features/auth/ nhé!
 import 'features/auth/login_screen.dart'; 
 
 void main() {
@@ -27,7 +22,8 @@ class VeSiAoApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF5F5F5),
       ),
       // SỬA Ở ĐÂY: Cho app mở màn hình Đăng nhập đầu tiên
-      home: const LoginScreen(), 
+      //home: const LoginScreen(), 
+      home: const MainNavigatorScreen(),
     );
   }
 }

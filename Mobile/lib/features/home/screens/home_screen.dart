@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'setup_trip_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,17 +12,17 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // 1. Trạng thái dữ liệu
-  String userName = "Đang tải..."; // Đổi "Bro" thành trạng thái chờ
+  String userName = "Đang tải..."; 
   int _selectedIndex = 0;
   
-  // Danh sách lưu lịch sử chuyến đi
+  // Danh sách lưu lịch sử chuyến đi (Sẽ lấy từ Database)
   List<Map<String, dynamic>> recentTrips = []; 
 
   @override
   void initState() {
     super.initState();
     fetchUserData(); 
-    fetchRecentTrips(); // Gọi thêm hàm lấy lịch sử chuyến đi
+    fetchRecentTrips(); // Gọi API lấy lịch sử thực tế
   }
 
   // 2. Hàm gọi API C# lấy tên User
@@ -31,34 +32,51 @@ class _HomeScreenState extends State<HomeScreen> {
       if (response.statusCode == 200) {
         final List<dynamic> users = jsonDecode(response.body);
         if (users.isNotEmpty) {
+          if (!mounted) return;
           setState(() {
-            // Sau này khi có API Login, ta sẽ lấy đúng User đang đăng nhập thay vì users[0]
             userName = users[0]['fullName'];
           });
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() { userName = "Người dùng"; });
     }
   }
 
-  // 3. Hàm giả lập lấy Lịch sử chuyến đi từ Database
-  void fetchRecentTrips() {
-    // Giả lập việc chờ API mất 1 giây
-    Future.delayed(const Duration(seconds: 1), () {
-      setState(() {
-        // --- BẠN CÓ THỂ BẬT/TẮT ĐOẠN NÀY ĐỂ TEST 2 TRƯỜNG HỢP ---
-        
-        // TRƯỜNG HỢP 1: Đã có chuyến đi (Dữ liệu mẫu)
-        recentTrips = [
-          {"id": "1", "title": "Về nhà", "time": "25/02/2026 - 19:30", "status": "An toàn"},
-          {"id": "2", "title": "Đến công ty", "time": "25/02/2026 - 08:00", "status": "An toàn"},
-        ];
+  // ==========================================
+  // 3. HÀM MỚI: LẤY LỊCH SỬ THẬT TỪ BACKEND C#
+  // ==========================================
+  Future<void> fetchRecentTrips() async {
+    try {
+      // Gọi lên Trạm thu phát sóng (API) bằng ID test
+      final response = await http.get(Uri.parse('http://localhost:5134/api/Trip/user/user-test-001'));
 
-        // TRƯỜNG HỢP 2: Chưa có chuyến đi nào (Xóa comment dòng dưới để test)
-        // recentTrips = []; 
-      });
-    });
+      if (response.statusCode == 200) {
+        // Giải mã gói hàng JSON từ C# gửi về
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final List<dynamic> tripsData = responseData['data']; // Rút lấy mảng "data"
+
+        if (!mounted) return;
+        
+        setState(() {
+          // Ép kiểu dữ liệu từ API sang dạng mà Giao diện đọc được
+          recentTrips = tripsData.map((trip) => {
+            "id": trip['id'].toString(),
+            "title": trip['title'] ?? "Không có tên",
+            "time": trip['time'] ?? "", // Hiện tại nó sẽ hiện chữ "15 phút" như bạn đã nhập
+            "status": trip['status'] ?? "Không rõ",
+          }).toList();
+
+          // Đảo ngược danh sách để chuyến đi MỚI NHẤT hiện lên trên cùng
+          recentTrips = recentTrips.reversed.toList();
+        });
+      }
+    } catch (e) {
+      print("Lỗi khi gọi API Lịch sử: $e");
+      if (!mounted) return;
+      setState(() { recentTrips = []; }); // Lỗi thì để danh sách trống
+    }
   }
 
   void _onItemTapped(int index) {
@@ -147,7 +165,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('Hiện tại bạn không có chuyến đi nào đang diễn ra', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                       const SizedBox(height: 20),
                       ElevatedButton(
-                        onPressed: () {},
+                        // SỬA Ở ĐÂY: Nút bấm đã được nối dây sang màn hình Thiết lập
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const SetupTripScreen()),
+                          );
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0095FF), foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
@@ -170,15 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 25),
 
-                // === KHỐI 5: GẦN ĐÂY (LỊCH SỬ THÔNG MINH) ===
+                // === KHỐI 5: GẦN ĐÂY (LỊCH SỬ THỰC TẾ) ===
                 const Text('Gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 
-                // KIỂM TRA LOGIC: CÓ DỮ LIỆU HAY KHÔNG?
                 recentTrips.isEmpty 
-                    ? _buildEmptyHistory() // Nếu List rỗng -> Hiện khối xám "Chưa có lịch sử"
+                    ? _buildEmptyHistory() 
                     : Column(
-                        children: recentTrips.map((trip) => _buildTripItem(trip)).toList(), // Nếu có -> Vẽ danh sách
+                        children: recentTrips.map((trip) => _buildTripItem(trip)).toList(), 
                       ),
                 
                 const SizedBox(height: 20),
@@ -187,13 +210,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-
-      // Thanh điều hướng
-    
     );
   }
 
-  // Khối vẽ Nút nhanh
   Widget _buildQuickActionButton(IconData icon, String label) {
     return Column(
       children: [
@@ -208,7 +227,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Khối giao diện khi CHƯA có lịch sử
   Widget _buildEmptyHistory() {
     return Container(
       width: double.infinity,
@@ -220,7 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Khối giao diện của 1 thẻ chuyến đi (Khi CÓ lịch sử)
   Widget _buildTripItem(Map<String, dynamic> trip) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
