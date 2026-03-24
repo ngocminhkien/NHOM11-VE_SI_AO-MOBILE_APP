@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'setup_trip_screen.dart';
+import 'track_trip_screen.dart';
+import 'emergency_notification_screen.dart';
+import 'emergency_contact_screen.dart';
+import 'profile_screen.dart';
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,70 +24,157 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Danh sách lưu lịch sử chuyến đi (Sẽ lấy từ Database)
   List<Map<String, dynamic>> recentTrips = []; 
+  bool _isLoadingTrips = true;
+  
+  // Active Trip Persistence
+  String? _activeTripId;
+  String? _activeTripName;
+  int? _activeTripTime;
+  int? _activeTripEndTime;
+
+  Timer? _homeTimer;
+  int _homeSecondsRemaining = 0;
 
   @override
   void initState() {
     super.initState();
-    fetchUserData(); 
-    fetchRecentTrips(); // Gọi API lấy lịch sử thực tế
+    _loadUserInfo();
   }
 
-  // 2. Hàm gọi API C# lấy tên User
-  Future<void> fetchUserData() async {
-    try {
-      final response = await http.get(Uri.parse('http://localhost:5134/api/Users'));
-      if (response.statusCode == 200) {
-        final List<dynamic> users = jsonDecode(response.body);
-        if (users.isNotEmpty) {
-          if (!mounted) return;
-          setState(() {
-            userName = users[0]['fullName'];
-          });
-        }
+  @override
+  void dispose() {
+    _homeTimer?.cancel();
+    super.dispose();
+  }
+
+  // 2. Hàm lấy thông tin người dùng từ SharedPreferences
+  Future<void> _loadUserInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String storedName = prefs.getString('fullName') ?? "Người dùng";
+    final String storedUserId = prefs.getString('userId') ?? "";
+    
+    final activeTripId = prefs.getString('activeTripId');
+    final activeTripName = prefs.getString('activeTripName');
+    final activeTripTime = prefs.getInt('activeTripTime') ?? 30;
+    final activeTripEndTime = prefs.getInt('activeTripEndTime');
+
+    if (mounted) {
+      setState(() {
+        userName = storedName;
+        _activeTripId = activeTripId;
+        _activeTripName = activeTripName;
+        _activeTripTime = activeTripTime;
+        _activeTripEndTime = activeTripEndTime;
+      });
+      _startHomeTimer();
+      if (storedUserId.isNotEmpty) {
+        fetchRecentTrips(storedUserId);
+        _updateFCMToken(storedUserId); // Gọi API lưu FCM Token
+      } else {
+        setState(() {
+          _isLoadingTrips = false;
+        });
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { userName = "Người dùng"; });
     }
   }
 
   // ==========================================
   // 3. HÀM MỚI: LẤY LỊCH SỬ THẬT TỪ BACKEND C#
   // ==========================================
-  Future<void> fetchRecentTrips() async {
+  void _startHomeTimer() {
+    _homeTimer?.cancel();
+    if (_activeTripEndTime != null) {
+      _homeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final diffSeconds = (_activeTripEndTime! - nowMs) ~/ 1000;
+        if (mounted) {
+          setState(() {
+            _homeSecondsRemaining = diffSeconds > 0 ? diffSeconds : 0;
+          });
+        }
+        if (diffSeconds <= 0) {
+          _homeTimer?.cancel();
+        }
+      });
+    }
+  }
+
+  String get _homeTimerString {
+    if (_homeSecondsRemaining <= 0) return "00:00";
+    int minutes = _homeSecondsRemaining ~/ 60;
+    int seconds = _homeSecondsRemaining % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _updateFCMToken(String userId) async {
     try {
-      // Gọi lên Trạm thu phát sóng (API) bằng ID test
-      final response = await http.get(Uri.parse('http://localhost:5134/api/Trip/user/user-test-001'));
+      // Yêu cầu thư viện FirebaseMessaging
+      // Đoạn này lấy mã thiết bị để Backend biết đường bắn Push Notification SOS
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await http.put(
+          Uri.parse('http://localhost:5134/api/Users/$userId/fcm-token'),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"token": token}),
+        );
+      }
+    } catch (e) {
+      debugPrint("Không thể lấy FCM Token (Firebase có thể chưa cài đặt file config): $e");
+    }
+  }
+
+  Future<void> fetchRecentTrips(String currentUserId) async {
+    try {
+      // Gọi lên Trạm thu phát sóng (API) bằng ID thực tế
+      final response = await http.get(Uri.parse('http://localhost:5134/api/Trip/user/$currentUserId'));
 
       if (response.statusCode == 200) {
-        // Giải mã gói hàng JSON từ C# gửi về
+        // Giải mã JSON từ C# gửi về
         final Map<String, dynamic> responseData = jsonDecode(response.body);
-        final List<dynamic> tripsData = responseData['data']; // Rút lấy mảng "data"
+        final List<dynamic>? tripsData = responseData['data']; // Rút lấy mảng "data"
 
         if (!mounted) return;
         
         setState(() {
-          // Ép kiểu dữ liệu từ API sang dạng mà Giao diện đọc được
-          recentTrips = tripsData.map((trip) => {
-            "id": trip['id'].toString(),
-            "title": trip['title'] ?? "Không có tên",
-            "time": trip['time'] ?? "", // Hiện tại nó sẽ hiện chữ "15 phút" như bạn đã nhập
-            "status": trip['status'] ?? "Không rõ",
-          }).toList();
+          if (tripsData != null && tripsData.isNotEmpty) {
+            recentTrips = tripsData.map((trip) => {
+              "id": trip['id'].toString(),
+              "title": trip['title'] ?? "Không có tên",
+              "time": trip['time'] ?? "", 
+              "status": trip['status'] ?? "Không rõ",
+            }).toList();
 
-          // Đảo ngược danh sách để chuyến đi MỚI NHẤT hiện lên trên cùng
-          recentTrips = recentTrips.reversed.toList();
+            // Đảo ngược danh sách để danh sách mới lên trên
+            recentTrips = recentTrips.reversed.toList();
+          }
         });
       }
     } catch (e) {
       print("Lỗi khi gọi API Lịch sử: $e");
       if (!mounted) return;
-      setState(() { recentTrips = []; }); // Lỗi thì để danh sách trống
+      setState(() { recentTrips = []; }); 
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingTrips = false;
+        });
+      }
     }
   }
 
   void _onItemTapped(int index) {
     setState(() { _selectedIndex = index; });
+  }
+
+  String _getGreeting() {
+    var hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Chào buổi sáng,';
+    } else if (hour < 18) {
+      return 'Chào buổi chiều,';
+    } else {
+      return 'Chào buổi tối,';
+    }
   }
 
   @override
@@ -101,18 +195,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('HELLO,', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                        Text(_getGreeting(), style: const TextStyle(color: Colors.grey, fontSize: 14)),
                         Text(
                           userName, 
                           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
-                    CircleAvatar(
-                      backgroundColor: Colors.grey[200],
-                      child: Text(
-                        userName != "Đang tải..." && userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                        style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
+                      },
+                      child: CircleAvatar(
+                        backgroundColor: Colors.grey[200],
+                        child: Text(
+                          userName != "Đang tải..." && userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                          style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],
@@ -132,7 +231,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       const Text('Nhấn để gửi báo động', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
                       const SizedBox(height: 20),
                       GestureDetector(
-                        onTap: () { print("Đã bấm SOS!"); },
+                        onLongPress: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const EmergencyNotificationScreen()));
+                        },
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nhấn giữ 2 giây để gửi SOS!')));
+                        },
                         child: Container(
                           width: 120, height: 120,
                           decoration: BoxDecoration(
@@ -144,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text('Liên hệ khẩn cấp sẽ được thông báo ngay lập tức', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      const Text('Nhấn giữ 2 giây để gửi báo động khẩn cấp', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 13)),
                     ],
                   ),
                 ),
@@ -160,27 +264,55 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.white, borderRadius: BorderRadius.circular(20),
                     boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), spreadRadius: 1, blurRadius: 10, offset: const Offset(0, 3))],
                   ),
-                  child: Column(
-                    children: [
-                      const Text('Hiện tại bạn không có chuyến đi nào đang diễn ra', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        // SỬA Ở ĐÂY: Nút bấm đã được nối dây sang màn hình Thiết lập
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const SetupTripScreen()),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0095FF), foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  child: _activeTripId != null
+                      ? Column(
+                          children: [
+                            const Icon(Icons.timer_outlined, color: Colors.redAccent, size: 40),
+                            const SizedBox(height: 10),
+                            Text(_activeTripName ?? 'Không rõ điểm đến', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 5),
+                            Text(_homeTimerString, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.red, letterSpacing: 2)),
+                            const SizedBox(height: 15),
+                            ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => TrackTripScreen(
+                                      tripId: _activeTripId!,
+                                      destinationName: _activeTripName ?? '',
+                                      estimatedMinutes: _activeTripTime ?? 30,
+                                    )),
+                                  ).then((_) => _loadUserInfo());
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0095FF), foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                ),
+                                child: const Text('Tiếp tục hành trình', style: TextStyle(fontSize: 16)),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            const Text('Hiện tại bạn không có chuyến đi nào đang diễn ra', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const SetupTripScreen()),
+                                ).then((_) => _loadUserInfo()); 
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0095FF), foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              ),
+                              child: const Text('Bắt đầu chuyến đi mới', style: TextStyle(fontSize: 16)),
+                            ),
+                          ],
                         ),
-                        child: const Text('Bắt đầu chuyến đi mới', style: TextStyle(fontSize: 16)),
-                      ),
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 25),
 
@@ -188,8 +320,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildQuickActionButton(Icons.timer_outlined, 'Hẹn giờ an toàn'),
-                    _buildQuickActionButton(Icons.group_outlined, 'Liên hệ khẩn cấp'),
+                    _buildQuickActionButton(Icons.timer_outlined, 'Hẹn giờ an toàn', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const SetupTripScreen())).then((_) => _loadUserInfo());
+                    }),
+                    _buildQuickActionButton(Icons.group_outlined, 'Liên hệ khẩn cấp', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const EmergencyContactScreen()));
+                    }),
                   ],
                 ),
                 const SizedBox(height: 25),
@@ -198,11 +334,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Text('Gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 
-                recentTrips.isEmpty 
-                    ? _buildEmptyHistory() 
-                    : Column(
-                        children: recentTrips.map((trip) => _buildTripItem(trip)).toList(), 
-                      ),
+                _isLoadingTrips 
+                    ? const Center(child: CircularProgressIndicator())
+                    : (recentTrips.isEmpty 
+                        ? _buildEmptyHistory() 
+                        : Column(
+                            children: recentTrips.map((trip) => _buildTripItem(trip)).toList(), 
+                          )),
                 
                 const SizedBox(height: 20),
               ],
@@ -213,17 +351,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActionButton(IconData icon, String label) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
-          child: Icon(icon, color: const Color(0xFF0095FF), size: 30),
-        ),
-        const SizedBox(height: 10),
-        Text(label, style: const TextStyle(color: Colors.black87)),
-      ],
+  Widget _buildQuickActionButton(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(color: Colors.grey[100], shape: BoxShape.circle),
+            child: Icon(icon, color: const Color(0xFF0095FF), size: 30),
+          ),
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(color: Colors.black87)),
+        ],
+      ),
     );
   }
 
@@ -233,12 +374,28 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(30),
       decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(20)),
       child: const Center(
-        child: Text('Chưa có lịch sử chuyến đi', style: TextStyle(color: Colors.grey, fontSize: 16)),
+        child: Text(
+          'Bạn chưa có hành trình nào gần đây. Hãy bắt đầu một chuyến đi mới!', 
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey, fontSize: 16)
+        ),
       ),
     );
   }
 
   Widget _buildTripItem(Map<String, dynamic> trip) {
+    final status = trip['status'] ?? '';
+    Color statusColor = Colors.blue;
+    IconData statusIcon = Icons.location_on;
+    
+    if (status == 'An toàn') {
+      statusColor = Colors.green;
+      statusIcon = Icons.check_circle;
+    } else if (status == 'SOS') {
+      statusColor = Colors.red;
+      statusIcon = Icons.warning_rounded;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(15),
@@ -251,8 +408,8 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.location_on, color: Colors.blue),
+            decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(statusIcon, color: statusColor),
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -267,8 +424,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: Text(trip['status'], style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+            decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            child: Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
           )
         ],
       ),

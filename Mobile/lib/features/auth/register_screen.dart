@@ -49,8 +49,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final String phone = _phoneController.text.trim();
 
     // LƯU Ý: Nếu chạy trên máy ảo Android, hãy đổi localhost thành 10.0.2.2
-    const String apiUrl = 'http://localhost:5134/api/Users/register';
-
+    //const String apiUrl = 'http://localhost:5134/api/Users/register';
+    const String apiUrl = 'http://127.0.0.1:5134/api/Users/register';
     try {
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -75,7 +75,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _showErrorDialog(data['message'] ?? "Lỗi đăng ký.");
       }
     } catch (e) {
-      _showErrorDialog("Không thể kết nối tới Server. Hãy đảm bảo Backend đang chạy!");
+      _showErrorDialog("Lỗi kết nối: $e");
     } finally {
       setState(() { _isLoading = false; });
     }

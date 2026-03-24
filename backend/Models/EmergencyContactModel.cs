@@ -9,6 +9,7 @@ namespace ve_si_ao_api.Models
         
         public string Name { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
+        public string? Email { get; set; } // Kênh cảnh báo Gmail
         public string Relation { get; set; } = string.Empty;
         public bool IsVerified { get; set; } = false; // Nút gạt bật/tắt
         

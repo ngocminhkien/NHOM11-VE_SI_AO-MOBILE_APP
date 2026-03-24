@@ -26,5 +26,8 @@ namespace ve_si_ao_api.Models
 
         // Mật khẩu đã mã hóa (Lưu vào DB)
         public string? PasswordHash { get; set; } 
+        
+        // Token thiết bị FireBase Cloud Messaging (FCM)
+        public string? FCMToken { get; set; }
     }
 }
